@@ -1,0 +1,22 @@
+# Gradle
+.gradle
+
+# Builds
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# Server
+server/
+
+# IDEA configuration
+.idea/*.xml
+!.idea/gradle.xml
+!.idea/misc.xml
+!.idea/vcs.xml
+*.iws
+*.iml
+*.ipr

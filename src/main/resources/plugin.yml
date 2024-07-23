@@ -1,0 +1,4 @@
+name: PluginTemplate
+main: org.discordrpc.plugin.PluginTemplate
+version: 1.0
+api-version: 1.20

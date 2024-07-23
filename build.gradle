@@ -1,0 +1,161 @@
+import groovy.json.JsonSlurper
+
+import java.nio.file.Files
+
+plugins {
+    id "java"
+    id "com.github.johnrengelman.shadow" version "8.1.1"
+}
+
+group = "org.discordrpc"
+version = "1.0-SNAPSHOT"
+archivesBaseName = "${project.name}-${version}"
+
+String mcVersion = "1.20.4"
+String serverMemory = "4096"
+File serverDir = new File("${projectDir}/server")
+File serverJar = new File("${serverDir}/server-${mcVersion}.jar")
+
+repositories {
+    mavenCentral()
+    maven { url = "https://repo.papermc.io/repository/maven-public/" }
+}
+
+dependencies {
+    // Plugin dependencies
+    compileOnly "io.papermc.paper:paper-api:${mcVersion}-R0.1-SNAPSHOT"
+
+    // Testing dependencies
+    testImplementation platform("org.junit:junit-bom:5.9.1")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+jar {
+    archiveFileName = "${archivesBaseName}.jar"
+}
+
+shadowJar {
+    archiveFileName = "${archivesBaseName}-shadow.jar"
+}
+
+build {
+    dependsOn "shadowJar"
+}
+
+/**
+ * Sets up the server directory and downloads the server jar
+ */
+tasks.register("setupServer") {
+    group = "dev"
+
+    onlyIf {
+        !serverJar.exists()
+    }
+
+    doFirst {
+        serverDir.mkdirs()
+
+        List<String> ver = mcVersion.tokenize(".")
+        String url = "https://papermc.io/api/v2/projects/paper"
+
+        URL builds = new URI("${url}/version_group/${ver[0]}.${ver[1]}/builds").toURL()
+        Object latestBuild = new JsonSlurper()
+                .parseText(builds.text)
+                .builds
+                .reverse()
+                .find { it.version == mcVersion }
+
+        String fileName = latestBuild.downloads.application.name
+        URI jar = new URI("${url}/versions/${latestBuild.version}/builds/${latestBuild.build}/downloads/${fileName}")
+
+        serverJar << jar.toURL().openStream()
+    }
+}
+
+tasks.register("downloadSpark") {
+    group = "dev"
+    dependsOn "setupServer"
+
+    File sparkJar = new File("${serverDir}/plugins/spark.jar")
+
+    onlyIf {
+        !sparkJar.exists()
+    }
+
+    doFirst {
+        File pluginsDir = new File("${serverDir}/plugins/")
+        pluginsDir.mkdirs()
+
+        URL sparkBuilds = new URI("https://ci.lucko.me/job/spark/lastSuccessfulBuild/api/json").toURL()
+        String latestBuild = new JsonSlurper()
+                .parseText(sparkBuilds.text)
+                .number
+                .toString()
+
+        URL artifactUrl = new URI("https://ci.lucko.me/job/spark/${latestBuild}/artifact/spark-bukkit/build/libs/").toURL()
+        String artifactPage = artifactUrl.text
+        String sparkBuildName = artifactPage.find(/spark-\d+\.\d+\.\d+-bukkit\.jar/)
+
+        URL downloadUrl = new URI("https://ci.lucko.me/job/spark/${latestBuild}/artifact/spark-bukkit/build/libs/${sparkBuildName}").toURL()
+        sparkJar << downloadUrl.openStream()
+    }
+}
+
+/**
+ * Runs the server
+ */
+tasks.register("runServer", JavaExec) {
+    group = "dev"
+    dependsOn "setupServer", "downloadSpark", "build"
+
+    doFirst {
+        File pluginsDir = new File("${serverDir}/plugins/")
+        pluginsDir.mkdirs()
+
+        File pluginJar = new File("${pluginsDir}/${archivesBaseName}.jar")
+        if (pluginJar.exists()) {
+            pluginJar.delete()
+        }
+        Files.createSymbolicLink(pluginJar.toPath(), shadowJar.outputs.getFiles().getSingleFile().toPath())
+    }
+
+    classpath = rootProject.files(serverJar)
+    workingDir = serverDir
+    main = "io.papermc.paperclip.Main"
+    jvmArgs = [
+            "-Dcom.mojang.eula.agree=true",
+            "-Xms${serverMemory}M",
+            "-Xmx${serverMemory}M",
+            "-Dterminal.jline=false",
+            "-Dterminal.ansi=true",
+            "-XX:+UseG1GC",
+            "-XX:+ParallelRefProcEnabled",
+            "-XX:MaxGCPauseMillis=200",
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+DisableExplicitGC",
+            "-XX:+AlwaysPreTouch",
+            "-XX:G1HeapWastePercent=5",
+            "-XX:G1MixedGCCountTarget=4",
+            "-XX:G1MixedGCLiveThresholdPercent=90",
+            "-XX:G1RSetUpdatingPauseTimePercent=5",
+            "-XX:SurvivorRatio=32",
+            "-XX:+PerfDisableSharedMem",
+            "-XX:MaxTenuringThreshold=1",
+            "-XX:G1NewSizePercent=30",
+            "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1HeapRegionSize=8M",
+            "-XX:G1ReservePercent=20",
+            "-XX:InitiatingHeapOccupancyPercent=15",
+            "-Dusing.aikars.flags=https://mcflags.emc.gs",
+            "-Daikars.new.flags=true",
+            "-Dpaper.preferSparkPlugin=true"
+    ]
+    args = [
+            "nogui"
+    ]
+    standardInput = System.in
+}
