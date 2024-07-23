@@ -76,6 +76,9 @@ tasks.register("setupServer") {
     }
 }
 
+/**
+ * Downloads the latest Spark build
+ */
 tasks.register("downloadSpark") {
     group = "dev"
     dependsOn "setupServer"
@@ -87,19 +90,23 @@ tasks.register("downloadSpark") {
     }
 
     doFirst {
+        // Create the plugins directory if it doesn't exist
         File pluginsDir = new File("${serverDir}/plugins/")
         pluginsDir.mkdirs()
 
+        // Get the latest Spark build number
         URL sparkBuilds = new URI("https://ci.lucko.me/job/spark/lastSuccessfulBuild/api/json").toURL()
         String latestBuild = new JsonSlurper()
                 .parseText(sparkBuilds.text)
                 .number
                 .toString()
 
+        // Get the latest Spark build artifact
         URL artifactUrl = new URI("https://ci.lucko.me/job/spark/${latestBuild}/artifact/spark-bukkit/build/libs/").toURL()
         String artifactPage = artifactUrl.text
         String sparkBuildName = artifactPage.find(/spark-\d+\.\d+\.\d+-bukkit\.jar/)
 
+        // Download the latest Spark build
         URL downloadUrl = new URI("https://ci.lucko.me/job/spark/${latestBuild}/artifact/spark-bukkit/build/libs/${sparkBuildName}").toURL()
         sparkJar << downloadUrl.openStream()
     }
