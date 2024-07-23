@@ -12,7 +12,7 @@ version = "1.0-SNAPSHOT"
 archivesBaseName = "${project.name}-${version}"
 
 String mcVersion = "1.20.4"
-String serverMemory = "4096"
+String serverMemory = "1028"
 File serverDir = new File("${projectDir}/server")
 File serverJar = new File("${serverDir}/server-${mcVersion}.jar")
 
